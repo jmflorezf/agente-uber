@@ -24,7 +24,7 @@ class Agent:
     max_pasengers = MAX_PASSENGERS
     
     def __init__(self, start_pos):
-        self.destination = None
+        self.destinations = None
         self.passengers = list()
         self.pos = start_pos
         self.requests = list()
@@ -36,13 +36,34 @@ class Agent:
 
     def perceive(self, requests):
         if requests:
+            print('Request received, calculating best path...')
+            print()
             self.requests += requests
 
+            # Passengers
+            options = [Destination(req, False) for req in self.passengers]
+            options += [Destination(req, True) for req in self.requests]
+
+            best_path = None
+            best_reward = float('-inf')
+
+            for path in self._simulate_paths(options, self.current_passengers):
+                reward = self._calculate_reward(path)
+
+                if reward > best_reward:
+                    best_reward = reward
+                    best_path = path
+
+            self.destinations = best_path
+
+            print('Best path determined:', best_path)
+                
     def act(self):
-        # TODO: Add actual logic here
-        if self.destination:
-            dest = self.destination
+        if self.destinations:
+            dest = self.destinations[0]
             if dest == self.pos:
+                self.destinations.pop(0)
+                
                 if dest.is_pickup:
                     self._pick_up(dest.request)
                 else:
@@ -55,7 +76,7 @@ class Agent:
                     self.pos.y += sign(dest.y - self.pos.y)
                 self.distance_traversed += 1
         else:
-            self.destination = Destination(self.requests.pop(0), True)
+            print('No requests. Idle.')
 
     @property
     def current_passengers(self):
@@ -67,7 +88,7 @@ class Agent:
 
     def _pick_up(self, request):
         self.passengers.append(request)
-        self.destination = Destination(request, False)
+        self.requests.remove(request)
         
         if request.passengers == 1:
             print('Picking up 1 passenger ', end='')
@@ -80,7 +101,6 @@ class Agent:
 
     def _drop_off(self, request):
         self.passengers.remove(request)
-        self.destination = None
         self.total_rewards += request.reward
 
         print('Droping off {0} passengers at {1}'.format(
@@ -89,6 +109,42 @@ class Agent:
 
         print('Reward: {0}'.format(request.reward))
         print()
+
+    def _simulate_paths(self, options, passengers):
+        if not options:
+            yield list()
+        else:
+            for i, option in enumerate(options):
+                cur_options = options[:]
+                cur_passengers = passengers
+                if option.is_pickup:
+                    if option.request.passengers + cur_passengers <= \
+                       MAX_PASSENGERS:
+                        cur_passengers += option.request.passengers
+                        cur_options.append(Destination(option.request, False))
+                    else:
+                        continue
+                else:
+                    cur_passengers -= option.request.passengers
+                other_opts = cur_options[:i] + cur_options[i+1:]
+                for path in self._simulate_paths(other_opts, cur_passengers):
+                    yield [option] + path
+
+    def _calculate_reward(self, path):
+        prev_dest = self.pos
+        dist = 0
+        reward = 0
+
+        for next_dest in path:
+            dist += prev_dest.dist(next_dest)
+            prev_point = next_dest
+            if next_dest.is_pickup:
+                reward += next_dest.request.reward
+
+        if dist != 0:
+            return reward / dist
+        else:
+            return 0
 
 class Request:
     def __init__(self, origin, destination, passengers):
@@ -105,14 +161,19 @@ class Request:
 
     @property
     def reward(self):
-        # Manhattan distance
-        return abs(self.origin.x - self.destination.x) + \
-               abs(self.origin.y - self.destination.y)
+        return self.origin.dist(self.destination)
 
 class Point:
     def __init__(self, x, y):
         self.x = x
         self.y = y
+
+    def dist(self, other):
+        # Manhattan distance
+        return abs(self.x - other.x) + abs(self.y - other.y)
+
+    def __repr__(self):
+        return self.__str__()
 
     def __str__(self):
         return '({0}, {1})'.format(self.x, self.y)
@@ -134,8 +195,8 @@ class Destination(Point):
 
 agent = Agent(Point(0,0))
 
-for _ in range(100):
-    if not agent.requests:
+for _ in range(200):
+    if random.random() < 0.1 and len(agent.requests) <= 7:
         origin = Point(random.randint(0, 10), random.randint(0, 10))
         destination = Point(random.randint(0, 10), random.randint(0, 10))
         agent.perceive([Request(origin, destination, random.randint(1, 4))])
