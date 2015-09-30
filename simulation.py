@@ -249,62 +249,6 @@ class Rectangle:
                                              self.min_y,
                                              self.max_y)
 
-class Path:
-    def __init__(self,
-                 path,
-                 next_node,
-                 passengers,
-                 options,
-                 prev_cost=0):
-        # Can only be extended if there are options left
-        self.can_extend = bool(options)
-        self.options = options
-
-        # The amount of passengers for this simulated run
-        self.passengers = passengers
-
-        # Path is the route so far, next_node is the next step in the route
-        if next_node:
-            path += [next_node]
-            
-        self._path = path
-        
-        if not next_node:
-            self.cost = prev_cost
-        else:
-            self.cost = prev_cost + path[-1].dist(path[-2])
-
-    def extend(self):
-        new_paths = []
-        for i, option in enumerate(self.options):
-            cur_options = self.options[:]
-            cur_passengers = self.passengers
-            if option.is_pickup:
-                if option.passengers + cur_passengers <= MAX_PASSENGERS:
-                    cur_passengers += option.passengers
-                    cur_options.append(option.destination())
-                else:
-                    continue
-            else:
-                cur_passengers -= option.passengers
-                
-            other_opts = cur_options[:i] + cur_options[i+1:]
-            new_paths.append(Path(self._path[:],
-                                  option,
-                                  cur_passengers,
-                                  other_opts,
-                                  self.cost))
-        return new_paths
-
-    def to_list(self):
-        return self._path[1:]
-
-    def __repr__(self):
-        return '%s' % self._path
-
-    def __str__(self):
-        return self.__repr__()
-
 
 agent = Agent(Point(0,0))
 
