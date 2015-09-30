@@ -21,8 +21,6 @@ def sign(x):
     
 
 class Agent:
-    max_pasengers = MAX_PASSENGERS
-    
     def __init__(self, start_pos):
         self.destinations = None
         self.passengers = list()
@@ -36,21 +34,23 @@ class Agent:
 
     def perceive(self, requests):
         if requests:
-            print('Request received, calculating best path...')
+            print('Request received')
             print()
             self.requests += requests
 
-            # Passengers
-            options = [Destination(req, False) for req in self.passengers]
-            # Requests
-            options += [Destination(req, True) for req in self.requests]
-
-            best_path = self._best_path(options)
-
-            self.destinations = best_path.to_list()
-
-            print('Best path determined:', best_path , '\n')                
+            if self.current_passengers < MAX_PASSENGERS:
+                self.destinations = self._best_path()
+                
     def act(self):
+        if not self.destinations:
+            if self.passengers:
+                self.destinations = self._best_path()
+            elif self.requests:
+                nearest_request = sorted(self.requests,
+                                         key=lambda x:
+                                             x.destination.dist(self.pos))[0]
+                self.destinations = [Destination(nearest_request, True)]
+                
         if self.destinations:
             dest = self.destinations[0]
             if dest == self.pos:
@@ -79,6 +79,9 @@ class Agent:
         return total
 
     def _pick_up(self, request):
+        if self.current_passengers + request.passengers > MAX_PASSENGERS:
+            raise Exception('Tried to pick up more passengers than allowed')
+            
         self.passengers.append(request)
         self.requests.remove(request)
         
@@ -88,7 +91,8 @@ class Agent:
             print('Picking up {0} passengers '.format(request.passengers), end='')
 
         print('at {0}'.format(request.origin))
-        print('Currently transporting {0} passengers'.format(self.current_passengers))
+        print('Currently transporting {0} passengers'
+              .format(self.current_passengers))
         print()
 
     def _drop_off(self, request):
@@ -99,65 +103,67 @@ class Agent:
             request.passengers,
             request.destination))
 
+        print('Currently transporting {0} passengers'
+              .format(self.current_passengers))
         print('Reward: {0}'.format(request.reward))
         print()
 
-    def _best_path(self, options):
-        paths = Path([self.pos],
-                     None,
-                     self.current_passengers,
-                     options).extend()
-        min_cost = float('inf')
-        extended = True
+    def _best_path(self):
+        self.destinations = [Destination(r, False)
+                                 for r in sorted(self.passengers,
+                                     key=lambda x:
+                                         x.destination.dist(self.pos))]
+        
+        if not self.passengers:
+            return []
 
-        while extended:
-            extended = False
-            for path in paths:
-                if path.can_extend and path.cost <= min_cost:
-                    extended = True
-                    paths.remove(path)
-                    paths += path.extend()
-                    paths = sorted(paths, key=lambda path: path.cost)
-                    min_cost = paths[0].cost
-                    break
+        if not self.requests or self.current_passengers == MAX_PASSENGERS:
+            return self.destinations
+        
+        print('Calculating best path...')
+        print()
 
-        return paths[0]
+        pos = self.pos
+        passengers = self.passengers
+        options = [r
+                   for r in self.requests
+                   if r.passengers + self.current_passengers <= MAX_PASSENGERS]
 
-    def _simulate_paths(self, options, passengers):
         if not options:
-            yield list()
-        else:
-            for i, option in enumerate(options):
-                cur_options = options[:]
-                cur_passengers = passengers
-                if option.is_pickup:
-                    if option.request.passengers + cur_passengers <= \
-                       MAX_PASSENGERS:
-                        cur_passengers += option.request.passengers
-                        cur_options.append(Destination(option.request, False))
-                    else:
-                        continue
-                else:
-                    cur_passengers -= option.request.passengers
-                other_opts = cur_options[:i] + cur_options[i+1:]
-                for path in self._simulate_paths(other_opts, cur_passengers):
-                    yield [option] + path
+            return self.destinations
 
-    def _calculate_reward(self, path):
-        prev_dest = self.pos
-        dist = 0
-        reward = 0
+        # Determine destination rectangle
+        current_set = [r.destination for r in passengers] + [pos]
+        dest_rect = Rectangle(current_set)
 
-        for next_dest in path:
-            dist += prev_dest.dist(next_dest)
-            prev_point = next_dest
-            if next_dest.is_pickup:
-                reward += next_dest.request.reward
+        def delta(request):
+            rect = Rectangle([pos, request.origin, request.destination])
+            d = rect.delta(dest_rect)
 
-        if dist != 0:
-            return reward / dist
-        else:
-            return 0
+            return d
+
+        # Order options by delta
+        ordered_opts = sorted([(delta(o), o) for o in options],
+                              key=lambda x: x[0])
+
+        s_passengers = self.current_passengers
+        dests = self.destinations
+
+        for d, option in ordered_opts:
+            if s_passengers == MAX_PASSENGERS:
+                break
+            
+            if d <= option.reward and \
+                   s_passengers + option.passengers <= MAX_PASSENGERS:
+                dests.append(Destination(option, True))
+                s_passengers += option.passengers
+
+        dests = sorted(dests, key=lambda d: d.dist(self.pos))
+
+        print('Best path determined:', dests)
+        print()
+        
+        return dests
 
 class Request:
     def __init__(self, origin, destination, passengers):
@@ -214,6 +220,34 @@ class Destination(Point):
             raise TypeError('This PathNode is already a destination')
 
         return Destination(self.request, False)
+
+class Rectangle:
+    def __init__(self, points):
+        if points:
+            self.min_x = min(points, key=lambda p: p.x).x
+            self.max_x = max(points, key=lambda p: p.x).x
+            self.min_y = min(points, key=lambda p: p.y).y
+            self.max_y = max(points, key=lambda p: p.y).y
+
+    def delta(self, other):
+        xd = 0
+        yd = 0
+        if self.min_x < other.min_x:
+            xd += abs(self.min_x - other.min_x)
+        if self.max_x > other.max_x:
+            xd += abs(self.max_x - other.max_x)
+        if self.min_y < other.min_y:
+            yd += abs(self.min_y - other.min_y)
+        if self.max_y > other.max_y:
+            yd += abs(self.max_y - other.max_y)
+
+        return 2 * xd + 2 * yd
+
+    def __repr__(self):
+        return '<Rect: (%d, %d, %d, %d)>' % (self.min_x,
+                                             self.max_x,
+                                             self.min_y,
+                                             self.max_y)
 
 class Path:
     def __init__(self,
@@ -274,10 +308,10 @@ class Path:
 
 agent = Agent(Point(0,0))
 
-for _ in range(200):
-    if random.random() < 0.1 and len(agent.requests) <= 5:
-        origin = Point(random.randint(0, 10), random.randint(0, 10))
-        destination = Point(random.randint(0, 10), random.randint(0, 10))
+for _ in range(500):
+    if random.random() < 0.1 and len(agent.requests) <= 20:
+        origin = Point(random.randint(0, 50), random.randint(0, 50))
+        destination = Point(random.randint(0, 50), random.randint(0, 50))
         agent.perceive([Request(origin, destination, random.randint(1, 4))])
 
     agent.act()
