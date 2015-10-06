@@ -34,21 +34,18 @@ class Agent:
 
     def perceive(self, requests):
         if requests:
-            print('Request received')
-            print()
             self.requests += requests
 
-            if self.current_passengers < MAX_PASSENGERS:
-                self.destinations = self._best_path()
+            self.destinations = self._best_path()
                 
     def act(self):
         if not self.destinations:
             if self.passengers:
                 self.destinations = self._best_path()
             elif self.requests:
-                nearest_request = sorted(self.requests,
+                nearest_request = min(self.requests,
                                          key=lambda x:
-                                             x.destination.dist(self.pos))[0]
+                                             x.destination.dist(self.pos))
                 self.destinations = [Destination(nearest_request, True)]
                 
         if self.destinations:
@@ -60,6 +57,8 @@ class Agent:
                     self._pick_up(dest.request)
                 else:
                     self._drop_off(dest.request)
+
+                self.destinations = self._best_path()
             else:
                 # Move towards destination
                 if dest.x != self.pos.x:
@@ -109,7 +108,7 @@ class Agent:
         print()
 
     def _best_path(self):
-        self.destinations = [Destination(r, False)
+        destinations = [Destination(r, False)
                                  for r in sorted(self.passengers,
                                      key=lambda x:
                                          x.destination.dist(self.pos))]
@@ -118,19 +117,20 @@ class Agent:
             return []
 
         if not self.requests or self.current_passengers == MAX_PASSENGERS:
-            return self.destinations
+            return destinations
+
+        options = [r
+                   for r in self.requests
+                   if r.passengers + self.current_passengers <= MAX_PASSENGERS]
+
+        if not options:
+            return destinations
         
         print('Calculating best path...')
         print()
 
         pos = self.pos
         passengers = self.passengers
-        options = [r
-                   for r in self.requests
-                   if r.passengers + self.current_passengers <= MAX_PASSENGERS]
-
-        if not options:
-            return self.destinations
 
         # Determine destination rectangle
         current_set = [r.destination for r in passengers] + [pos]
@@ -147,7 +147,6 @@ class Agent:
                               key=lambda x: x[0])
 
         s_passengers = self.current_passengers
-        dests = self.destinations
 
         for d, option in ordered_opts:
             if s_passengers == MAX_PASSENGERS:
@@ -155,15 +154,15 @@ class Agent:
             
             if d <= option.reward and \
                    s_passengers + option.passengers <= MAX_PASSENGERS:
-                dests.append(Destination(option, True))
+                destinations.append(Destination(option, True))
                 s_passengers += option.passengers
 
-        dests = sorted(dests, key=lambda d: d.dist(self.pos))
+        destinations = sorted(destinations, key=lambda d: d.dist(self.pos))
 
-        print('Best path determined:', dests)
+        print('Best path determined:', destinations)
         print()
         
-        return dests
+        return destinations
 
 class Request:
     def __init__(self, origin, destination, passengers):
@@ -252,8 +251,8 @@ class Rectangle:
 
 agent = Agent(Point(0,0))
 
-for _ in range(500):
-    if random.random() < 0.1 and len(agent.requests) <= 20:
+for _ in range(600):
+    if random.random() < 0.1 and len(agent.requests) <= 30:
         origin = Point(random.randint(0, 50), random.randint(0, 50))
         destination = Point(random.randint(0, 50), random.randint(0, 50))
         agent.perceive([Request(origin, destination, random.randint(1, 4))])
