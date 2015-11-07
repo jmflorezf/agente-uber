@@ -1,2 +1,2 @@
 # agente-uber
-Ejercicio de desarrollo de agente racional para sistemas inteligentes
+Ejercicio de desarrollo de agente racional con algoritmos genéticos para sistemas inteligentes.
