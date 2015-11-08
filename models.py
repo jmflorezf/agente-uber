@@ -211,11 +211,17 @@ class Destination(Point):
     def passengers(self):
         return self.request.passengers
 
-    def destination(self):
+    def get_destination(self):
         if not self.is_pickup:
             raise TypeError('This PathNode is already a destination')
 
         return Destination(self.request, False)
+
+    def __eq__(self, other):
+        if self.request != other.request:
+            return False
+        else:
+            return super().__eq__(other)
 
 class Rectangle:
     def __init__(self, points):

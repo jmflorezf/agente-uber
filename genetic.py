@@ -5,18 +5,14 @@ Execution of taxi driver problem using genetic algorithms
 """
 
 
-import genetic_models
-import models
+from genetic_models import GeneticAlgorithm, simulate_path
 
 
-r1 = models.Request(models.Point(0,0),models.Point(1,5), 1)
-r2 = models.Request(models.Point(2,3),models.Point(3,5), 1)
-r3 = models.Request(models.Point(1,4),models.Point(5,8), 4)
+g = GeneticAlgorithm(population_size=10,
+                     request_amount=70,
+                     max_generations=20000,
+                     mutation_rate=0.05)
 
-paths = [genetic_models.Path(path)
-         for path in genetic_models.make_random_population([r1, r2, r3],8)]
+g.run()
 
-for path in paths:
-    print(path)
-    print(path.fitness(models.Point(0,0)))
-    print()
+##simulate_path(g.fittest)
